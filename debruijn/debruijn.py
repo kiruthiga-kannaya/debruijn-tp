@@ -17,6 +17,9 @@ import argparse
 import os
 import sys
 from pathlib import Path
+
+import networkx as nx
+
 from networkx import (
     DiGraph,
     all_simple_paths,
@@ -123,10 +126,6 @@ def cut_kmer(read: str, kmer_size: int) -> Iterator[str]: # implémentation d’
         yield kmer
     pass
 
-# prend un fichier fastq, une longueur k-mer et retourne un 
-## dictionnaire ayant pour clé le k-mer et pour valeur le nombre d’occurrence de ce k-mer.
-### build_kmer_dict génère un dictionnaire recensant tous les k-mers (avec leur occurrence) dans
-#### notre fichier fastq.
 def build_kmer_dict(fastq_file: Path, kmer_size: int) -> Dict[str, int]:
     """Build a dictionnary object of all kmer occurrences in the fastq file
 
@@ -156,8 +155,8 @@ def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
     digraph = nx.DiGraph()
 
     for kmer in kmer_dict :
-        prefixe = str(kmer[:-1])
-        suffixe = str(kmer[1:])
+        prefixe = kmer[:-1]
+        suffixe = kmer[1:]
         
         digraph.add_edge(prefixe, suffixe , weight=kmer_dict[kmer] )
 
@@ -256,13 +255,21 @@ def solve_out_tips(graph: DiGraph, ending_nodes: List[str]) -> DiGraph:
     """
     pass
 
-
+# prend en entrée un graphe et retourne une liste de noeudsd’entrée
+## Les nœuds d’entrée correspondent aux nœuds qui n’ont pas de prédécesseurs.
 def get_starting_nodes(graph: DiGraph) -> List[str]:
     """Get nodes without predecessors
 
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without predecessors
     """
+    starting_nodes = []
+    for node in graph.nodes() : 
+        if len(list(graph.predecessors(node))) == 0:
+            starting_nodes.append(node)
+
+    return starting_nodes
+
     pass
 
 
@@ -272,6 +279,13 @@ def get_sink_nodes(graph: DiGraph) -> List[str]:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without successors
     """
+    ending_nodes = []
+    for node in graph.nodes() : 
+        if len(list(graph.successors(node))) == 0:
+            ending_nodes.append(node)
+    
+    return ending_nodes
+
     pass
 
 
@@ -285,6 +299,22 @@ def get_contigs(
     :param ending_nodes: (list) A list of nodes without successors
     :return: (list) List of [contiguous sequence and their length]
     """
+
+    contig_list = []
+    for start_node in starting_nodes :
+        for end_node in ending_nodes :
+           if nx.has_path(graph, start_node, end_node) :
+            for path in nx.all_simple_paths(graph, start_node, end_node) :
+                contig = path[0]
+
+                for node in path[1:] : 
+                    contig += node[-1]
+
+                length_contig = len(contig)
+                contig_list.append((contig, length_contig))
+
+    return(contig_list)
+    
     pass
 
 
@@ -294,6 +324,13 @@ def save_contigs(contigs_list: List[str], output_file: Path) -> None:
     :param contig_list: (list) List of [contiguous sequence and their length]
     :param output_file: (Path) Path to the output file
     """
+    with open(output_file, "w") as fasta :
+        n=0
+        for contig, length_contig in contigs_list :
+            fasta.write(f">contig_{n} len={length_contig}\n")
+            fasta.write(f"{textwrap.fill(contig, width=80)}\n")
+            n += 1
+
     pass
 
 
@@ -337,7 +374,19 @@ def main() -> None:  # pragma: no cover
     # Plot the graph
     # if args.graphimg_file:
     #     draw_graph(graph, args.graphimg_file)
+    
+    kmer_dict = build_kmer_dict(args.fastq_file, args.kmer_size)
+    graph = build_graph(kmer_dict)
 
+    starting_nodes = get_starting_nodes(graph)
+    ending_nodes = get_sink_nodes(graph)
+
+    contigs = get_contigs(graph, starting_nodes, ending_nodes)
+
+    save_contigs(contigs, args.output_file)
+
+    if args.graphimg_file:
+        draw_graph(graph, args.graphimg_file)
 
 if __name__ == "__main__":  # pragma: no cover
     main()
