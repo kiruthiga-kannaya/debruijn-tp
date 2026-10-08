@@ -96,30 +96,54 @@ def get_arguments():  # pragma: no cover
     return parser.parse_args()
 
 
-def read_fastq(fastq_file: Path) -> Iterator[str]:
+def read_fastq(fastq_file: Path) -> Iterator[str]: #implémentation d’un générateur
     """Extract reads from fastq files.
 
     :param fastq_file: (Path) Path to the fastq file.
     :return: A generator object that iterate the read sequences.
     """
+    with open(fastq_file, "r") as fichier :
+        for ligne in fichier:
+            sequence = next(fichier).strip()
+            next(fichier)
+            next(fichier)
+
+            yield sequence
     pass
 
 
-def cut_kmer(read: str, kmer_size: int) -> Iterator[str]:
+def cut_kmer(read: str, kmer_size: int) -> Iterator[str]: # implémentation d’un générateur
     """Cut read into kmers of size kmer_size.
 
     :param read: (str) Sequence of a read.
     :return: A generator object that provides the kmers (str) of size kmer_size.
     """
+    for base in range(len(read)- kmer_size + 1) : 
+        kmer = read[base : base + kmer_size]
+        yield kmer
     pass
 
-
+# prend un fichier fastq, une longueur k-mer et retourne un 
+## dictionnaire ayant pour clé le k-mer et pour valeur le nombre d’occurrence de ce k-mer.
+### build_kmer_dict génère un dictionnaire recensant tous les k-mers (avec leur occurrence) dans
+#### notre fichier fastq.
 def build_kmer_dict(fastq_file: Path, kmer_size: int) -> Dict[str, int]:
     """Build a dictionnary object of all kmer occurrences in the fastq file
 
     :param fastq_file: (str) Path to the fastq file.
     :return: A dictionnary object that identify all kmer occurrences.
     """
+    kmer_occ_dict = {}
+
+    for sequence in read_fastq(fastq_file) :
+        for kmer in cut_kmer(sequence, kmer_size) :
+            if kmer in kmer_occ_dict : 
+                kmer_occ_dict[kmer] += 1
+            else :
+                kmer_occ_dict[kmer] = 1                
+            
+    return kmer_occ_dict
+
     pass
 
 
@@ -129,6 +153,16 @@ def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
     :param kmer_dict: A dictionnary object that identify all kmer occurrences.
     :return: A directed graph (nx) of all kmer substring and weight (occurrence).
     """
+    digraph = nx.DiGraph()
+
+    for kmer in kmer_dict :
+        prefixe = str(kmer[:-1])
+        suffixe = str(kmer[1:])
+        
+        digraph.add_edge(prefixe, suffixe , weight=kmer_dict[kmer] )
+
+    return digraph
+
     pass
 
 
